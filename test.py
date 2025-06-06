@@ -190,4 +190,4 @@ elif page == "📊 Financial Modeling":
 
 # Footer
 st.markdown("---")
-st.markdown("© 2025 Greenbridge Capital Management | Climate Finance Analytics Platform")
+st.markdown("© Demo Climate Finance Analytics Platform")
