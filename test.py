@@ -24,45 +24,27 @@ def get_date_prefix():
 # Function to generate next project ID
 def get_next_project_id():
     try:
-        # Fetch latest project by submission date
+        # Fetch the latest project by submission date
         response = supabase.table("projects").select("project_id") \
             .order("project_submission_date", desc=True).limit(1).execute()
 
-        today_prefix = get_date_prefix()
-        next_number = 1  # Default if no previous records
+        today_prefix = datetime.now().strftime("%y%m%d")
+        next_number = 1
 
         if response.data:
-            last_record = response.data[0]
-            last_id = last_record.get('project_id')
+            last_id = response.data[0]["project_id"]
+            parts = last_id.split("req")
 
-            if last_id:
-                parts = last_id.split("-")
-
-                # Validate the format of the last ID
-                if len(parts) == 2 and parts[0].isdigit() and parts[1].startswith("req"):
-                    number_part = parts[1]
-
-                    if number_part[3:].isdigit():
-                        current_number = int(number_part[3:])
-                        if parts[0] == today_prefix:
-                            next_number = current_number + 1
-                        else:
-                            next_number = 1
-                    else:
-                        st.warning("Malformed project number part. Starting from req1.")
-                else:
-                    st.warning("Malformed project ID format. Starting from req1.")
+            if len(parts) == 2 and parts[0] == f"{today_prefix}-":
+                next_number = int(parts[1]) + 1
             else:
-                st.warning("Missing project_id in latest record. Starting from req1.")
-        else:
-            st.info("No existing projects found. Starting from req1.")
+                next_number = 1  # New day, reset counter
 
-        new_id = f"{today_prefix}-req{next_number}"
-        return new_id
+        return f"{today_prefix}-req{next_number}"
 
     except Exception as e:
         st.error(f"Error generating project ID: {str(e)}")
-        return None
+        return f"{today_prefix}-req1"
 
 
 # Function to save project with retry on duplicate key error
