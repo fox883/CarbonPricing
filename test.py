@@ -7,7 +7,7 @@ import numpy as np
 import plotly.express as px
 from datetime import datetime
 
-# Load environment variables
+# Load environment variables from .env
 load_dotenv()
 
 # Initialize Supabase client
@@ -16,16 +16,16 @@ key = os.getenv("SUPABASE_KEY")
 supabase = create_client(url, key)
 
 
-# Helper function to get today's prefix
+# Helper function to get today's prefix in YYMMDD format
 def get_date_prefix():
     return datetime.now().strftime("%y%m%d")
 
 
-# Helper function to generate next project ID
+# Function to generate next project ID
 def get_next_project_id():
     try:
         # Fetch latest project by submission date
-        response = supabase.table("projects").select("project_id, project_submission_date") \
+        response = supabase.table("projects").select("project_id") \
             .order("project_submission_date", desc=True).limit(1).execute()
 
         today_prefix = get_date_prefix()
@@ -38,26 +38,57 @@ def get_next_project_id():
             if last_id:
                 parts = last_id.split("-")
 
-                if len(parts) == 2 and parts[0] == today_prefix:
+                # Validate the format of the last ID
+                if len(parts) == 2 and parts[0].isdigit() and parts[1].startswith("req"):
                     number_part = parts[1]
 
-                    if number_part.startswith("req") and number_part[3:].isdigit():
-                        next_number = int(number_part[3:]) + 1
+                    if number_part[3:].isdigit():
+                        current_number = int(number_part[3:])
+                        if parts[0] == today_prefix:
+                            next_number = current_number + 1
+                        else:
+                            next_number = 1
                     else:
                         st.warning("Malformed project number part. Starting from req1.")
                 else:
-                    # Different date prefix — start fresh
-                    next_number = 1
+                    st.warning("Malformed project ID format. Starting from req1.")
             else:
                 st.warning("Missing project_id in latest record. Starting from req1.")
         else:
             st.info("No existing projects found. Starting from req1.")
 
-        return f"{today_prefix}-req{next_number}"
+        new_id = f"{today_prefix}-req{next_number}"
+        return new_id
 
     except Exception as e:
         st.error(f"Error generating project ID: {str(e)}")
         return None
+
+
+# Function to save project with retry on duplicate key error
+def save_project(data):
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = supabase.table("projects").insert(data).execute()
+            st.success(f"✅ Project `{data['project_id']}` saved successfully!")
+            return True
+        except Exception as e:
+            error_msg = str(e)
+            if "duplicate key value violates unique constraint" in error_msg:
+                st.warning(f"Attempt {attempt + 1}: Duplicate ID detected. Regenerating...")
+                new_id = get_next_project_id()
+                if new_id:
+                    st.info(f"New ID generated: `{new_id}`")
+                    data["project_id"] = new_id
+                    continue
+                else:
+                    st.error("Failed to regenerate a unique project ID.")
+                    return False
+            else:
+                st.error(f"❌ Failed to save project after {attempt + 1} attempts: {error_msg}")
+                return False
+    return False
 
 
 # Financial model functions
@@ -151,9 +182,8 @@ elif page == "🆕 New Project":
                     "project_type_category": project_type,
                     "project_status": project_status
                 }
-                response = supabase.table("projects").insert(data).execute()
-                st.success(f"✅ Project `{new_id}` saved successfully!")
-                del st.session_state.new_project_id
+                if save_project(data):
+                    del st.session_state.new_project_id
             except Exception as e:
                 st.error(f"❌ Failed to save project: {str(e)}")
 
