@@ -24,21 +24,36 @@ def get_date_prefix():
 # Helper function to generate next project ID
 def get_next_project_id():
     try:
-        response = supabase.table("projects").select("project_id") \
+        # Fetch latest project by submission date
+        response = supabase.table("projects").select("project_id, project_submission_date") \
             .order("project_submission_date", desc=True).limit(1).execute()
 
+        today_prefix = get_date_prefix()
+        next_number = 1  # Default if no previous records
+
         if response.data:
-            last_id = response.data[0]['project_id']
-            parts = last_id.split("-")
+            last_record = response.data[0]
+            last_id = last_record.get('project_id')
 
-            if len(parts) == 2 and parts[0] == get_date_prefix():
-                num = int(parts[1][3:]) + 1
+            if last_id:
+                parts = last_id.split("-")
+
+                if len(parts) == 2 and parts[0] == today_prefix:
+                    number_part = parts[1]
+
+                    if number_part.startswith("req") and number_part[3:].isdigit():
+                        next_number = int(number_part[3:]) + 1
+                    else:
+                        st.warning("Malformed project number part. Starting from req1.")
+                else:
+                    # Different date prefix — start fresh
+                    next_number = 1
             else:
-                num = 1
+                st.warning("Missing project_id in latest record. Starting from req1.")
         else:
-            num = 1
+            st.info("No existing projects found. Starting from req1.")
 
-        return f"{get_date_prefix()}-req{num}"
+        return f"{today_prefix}-req{next_number}"
 
     except Exception as e:
         st.error(f"Error generating project ID: {str(e)}")
