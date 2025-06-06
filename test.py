@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from datetime import datetime
+from datetime import datetime
 
 # Load environment variables from .env
 load_dotenv()
@@ -24,22 +25,17 @@ def get_date_prefix():
 # Function to generate next project ID
 def get_next_project_id():
     try:
-        # Fetch the latest project ID from the database
-        response = supabase.table("projects").select("project_id") \
-            .order("project_submission_date", desc=True).limit(1).execute()
-
         today_prefix = datetime.now().strftime("%y%m%d")
-        next_number = 1  # Default if no previous records
 
-        if response.data:
-            last_id = response.data[0]["project_id"]
-            parts = last_id.split("-")
+        # Step 1: Get all projects with today's prefix
+        response = supabase.table("projects").select("project_id") \
+            .like("project_id", f"{today_prefix}%").execute()
 
-            # Ensure the format is correct: "YYYYMMDD-reqN"
-            if len(parts) == 2 and parts[0] == today_prefix and parts[1].startswith("req"):
-                number_part = parts[1][3:]  # Extract the number after "req"
-                if number_part.isdigit():
-                    next_number = int(number_part) + 1
+        # Step 2: Count how many already exist
+        count = len(response.data) if response.data else 0
+
+        # Step 3: Add 1 to get the next number
+        next_number = count + 1
 
         return f"{today_prefix}-req{next_number}"
 
